@@ -1,124 +1,96 @@
 import streamlit as st
-from PIL import Image, ImageDraw, ImageFont
-import numpy as np
-import os
-
-# 이미지 리소스 경로 (이 경로에 투명 배경의 이미지들을 넣어주세요)
-IMAGE_RESOURCES_PATH = "images"
-HAT_PATH = os.path.join(IMAGE_RESOURCES_PATH, "mario_hat.png")
-MUSTACHE_PATH = os.path.join(IMAGE_RESOURCES_PATH, "mario_mustache.png")
-EARS_PATH = os.path.join(IMAGE_RESOURCES_PATH, "cat_ears.png")
-TAIL_PATH = os.path.join(IMAGE_RESOURCES_PATH, "cat_tail.png")
+import time
 
 st.set_page_config(
-    page_title="고양이 마리오 생성기",
+    page_title="고양이 마리오 (텍스트 버전)",
     page_icon="🐱"
 )
 
-def overlay_image(background_img, overlay_img, position, size=None):
-    """
-    배경 이미지 위에 다른 이미지를 오버레이합니다.
-    background_img: PIL Image 객체
-    overlay_img: PIL Image 객체 (투명 배경)
-    position: (x, y) 튜플 (오버레이 이미지의 좌상단 좌표)
-    size: (width, height) 튜플 (오버레이 이미지의 크기를 조절)
-    """
-    if size:
-        overlay_img = overlay_img.resize(size)
+# 게임 상태를 저장할 변수 초기화
+if "game_state" not in st.session_state:
+    st.session_state.game_state = "start"
+    st.session_state.game_over = False
+    st.session_state.score = 0
 
-    # 오버레이 이미지가 알파 채널을 가지고 있는지 확인
-    if overlay_img.mode != 'RGBA':
-        overlay_img = overlay_img.convert('RGBA')
+def reset_game():
+    """게임을 초기화하는 함수"""
+    st.session_state.game_state = "start"
+    st.session_state.game_over = False
+    st.session_state.score = 0
 
-    # 배경 이미지의 특정 영역에 오버레이 이미지를 붙여넣기
-    # 이 부분은 단순 오버레이이며, 얼굴 인식 등 복잡한 위치 조정은 포함하지 않습니다.
-    x, y = position
-    background_img.paste(overlay_img, (x, y), overlay_img)
-    return background_img
+def go_to_level(level_name):
+    """다음 레벨로 이동하는 함수"""
+    st.session_state.game_state = level_name
+    st.session_state.score += 1
 
-def main():
-    st.title('🐱 고양이 마리오 생성기')
+def end_game(message):
+    """게임 오버를 처리하는 함수"""
+    st.session_state.game_over = True
+    st.error(f"❌ 게임 오버: {message}")
+    st.warning("다시 시작하려면 아래 버튼을 눌러주세요.")
+    if st.button("다시 시작하기", on_click=reset_game):
+        st.experimental_rerun()
+
+def render_level():
+    """현재 게임 상태에 따라 화면을 렌더링하는 함수"""
+    if st.session_state.game_state == "start":
+        st.title('🐱 고양이 마리오 텍스트 모험')
+        st.markdown("---")
+        st.image("https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?q=80&w=2940&auto=format&fit=crop", caption="마을 입구에 도착한 고양이 마리오...", use_column_width=True)
+        st.write("마을 입구에 도착했습니다. 당신의 앞에는 마리오의 상징적인 **물음표 블록**이 두 개 보입니다. 어느 것을 칠까요?")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("왼쪽 블록 치기"):
+                go_to_level("level_1_left")
+        with col2:
+            if st.button("오른쪽 블록 치기"):
+                go_to_level("level_1_right")
+
+    elif st.session_state.game_state == "level_1_left":
+        st.header("레벨 1: 물음표 블록")
+        st.write("당신은 왼쪽 블록을 쳤습니다. **앗!** 블록에서 동전 대신 날카로운 가시가 튀어나왔습니다.")
+        end_game("가시에 찔렸습니다. 역시나 함정이었군요.")
+
+    elif st.session_state.game_state == "level_1_right":
+        st.header("레벨 1: 물음표 블록")
+        st.write("당신은 오른쪽 블록을 쳤습니다. **와!** 블록에서 버섯이 나왔습니다. 몸이 조금 더 커진 것 같네요.")
+        st.success("버섯 획득! 계속 전진하세요.")
+        st.image("https://images.unsplash.com/photo-1549557492-c0e862024de3?q=80&w=2940&auto=format&fit=crop", caption="성장 버섯을 획득했다!", use_column_width=True)
+        if st.button("계속하기"):
+            go_to_level("level_2")
+            st.experimental_rerun()
+
+    elif st.session_state.game_state == "level_2":
+        st.header("레벨 2: 절벽과 파이프")
+        st.write("버섯을 먹고 힘차게 달리던 중, 앞에 깊은 절벽이 나타났습니다. 절벽 아래로는 초록색 파이프가 보입니다. 점프해서 건너갈까요, 아니면 파이프 안으로 들어갈까요?")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("점프해서 건너가기"):
+                end_game("절벽을 건너가려다 발을 헛디뎠습니다. 그대로 아래로 추락했습니다.")
+        with col2:
+            if st.button("파이프 안으로 들어가기"):
+                st.write("파이프 안으로 조심스럽게 들어갔습니다. 놀랍게도 파이프 아래는 안전한 통로였습니다!")
+                st.success("안전하게 다음 구역으로 이동했습니다.")
+                if st.button("다음 레벨로"):
+                    go_to_level("level_3")
+                    st.experimental_rerun()
+
+    elif st.session_state.game_state == "level_3":
+        st.header("레벨 3: 최종 보스")
+        st.write("모든 역경을 뚫고 최종 보스 성에 도착했습니다. 성 안에는 거대한 악당이 기다리고 있습니다.")
+        st.write("...라고 생각했지만, 갑자기 **'끝'** 이라는 글자가 나타나더니 게임이 종료되었습니다.")
+        st.balloons()
+        end_game("성공적으로 게임을 클리어했습니다! 하지만 이런 게임이 늘 그렇듯, 허무한 엔딩이 기다리고 있었군요.")
+
     st.markdown("---")
-    st.write("당신의 사진에 마리오의 모자, 콧수염과 고양이 귀, 꼬리를 추가하여 고양이 마리오를 만들어보세요!")
-    st.info("이 앱은 예시이며, 실제 얼굴 인식 및 정확한 이미지 합성은 추가적인 복잡한 로직이 필요합니다.")
+    st.write(f"현재 점수: {st.session_state.score}")
+    
+    if st.session_state.game_over:
+        st.markdown("<p style='text-align: center;'><strong>게임 오버!</strong></p>", unsafe_allow_html=True)
+        if st.button("다시 시작", key="restart_after_game_over"):
+            st.experimental_rerun()
 
-    # 이미지 리소스 존재 여부 확인
-    resources_exist = True
-    if not os.path.exists(IMAGE_RESOURCES_PATH):
-        st.warning(f"'{IMAGE_RESOURCES_PATH}' 폴더가 없습니다. 이미지 리소스를 넣어주세요.")
-        resources_exist = False
-    else:
-        for path in [HAT_PATH, MUSTACHE_PATH, EARS_PATH, TAIL_PATH]:
-            if not os.path.exists(path):
-                st.warning(f"필요한 이미지 파일 '{os.path.basename(path)}'이(가) '{IMAGE_RESOURCES_PATH}' 폴더에 없습니다. 파일을 넣어주세요.")
-                resources_exist = False
-
-    if not resources_exist:
-        st.stop() # 리소스 없으면 앱 중단
-
-    uploaded_file = st.file_uploader("사진을 업로드하세요", type=['png', 'jpg', 'jpeg'])
-
-    if uploaded_file is not None:
-        try:
-            original_image = Image.open(uploaded_file).convert("RGBA")
-            st.subheader("원본 이미지")
-            st.image(original_image, use_column_width=True)
-
-            st.markdown("---")
-            st.subheader("고양이 마리오 이미지")
-
-            # 리소스 이미지 로드 (투명 배경 이미지)
-            mario_hat = Image.open(HAT_PATH).convert("RGBA")
-            mario_mustache = Image.open(MUSTACHE_PATH).convert("RGBA")
-            cat_ears = Image.open(EARS_PATH).convert("RGBA")
-            cat_tail = Image.open(TAIL_PATH).convert("RGBA")
-
-            processed_image = original_image.copy()
-
-            # --- 이미지 오버레이 (예시 위치, 실제 구현 시 얼굴 인식 등으로 위치 조정 필요) ---
-            img_width, img_height = original_image.size
-
-            # 모자 (이미지 상단 중앙)
-            hat_size = (int(img_width * 0.4), int(img_width * 0.4 / mario_hat.width * mario_hat.height))
-            processed_image = overlay_image(processed_image, mario_hat, (int(img_width * 0.3), int(img_height * 0.05)), size=hat_size)
-
-            # 고양이 귀 (모자 옆 또는 모자 위쪽)
-            ears_size = (int(img_width * 0.2), int(img_width * 0.2 / cat_ears.width * cat_ears.height))
-            processed_image = overlay_image(processed_image, cat_ears, (int(img_width * 0.1), int(img_height * 0.02)), size=ears_size)
-            processed_image = overlay_image(processed_image, cat_ears.transpose(Image.FLIP_LEFT_RIGHT), (int(img_width * 0.7), int(img_height * 0.02)), size=ears_size)
-
-
-            # 콧수염 (이미지 중앙 하단)
-            mustache_size = (int(img_width * 0.25), int(img_width * 0.25 / mario_mustache.width * mario_mustache.height))
-            processed_image = overlay_image(processed_image, mario_mustache, (int(img_width * 0.4), int(img_height * 0.5)), size=mustache_size)
-
-            # 꼬리 (이미지 하단, 실제 인물에 붙이려면 더 복잡한 처리 필요)
-            tail_size = (int(img_width * 0.3), int(img_width * 0.3 / cat_tail.width * cat_tail.height))
-            processed_image = overlay_image(processed_image, cat_tail, (int(img_width * 0.7), int(img_height * 0.8)), size=tail_size)
-
-
-            st.image(processed_image, use_column_width=True, caption="짠! 고양이 마리오!")
-
-            # 결과 이미지 다운로드 버튼
-            st.markdown("---")
-            st.download_button(
-                label="결과 이미지 다운로드",
-                data=image_to_byte_array(processed_image),
-                file_name="cat_mario.png",
-                mime="image/png"
-            )
-
-        except Exception as e:
-            st.error(f"이미지 처리 중 오류가 발생했습니다: {e}")
-            st.exception(e)
-
-def image_to_byte_array(image: Image) -> bytes:
-    """PIL Image를 바이트 배열로 변환"""
-    import io
-    img_byte_arr = io.BytesIO()
-    image.save(img_byte_arr, format='PNG')
-    img_byte_arr = img_byte_arr.getvalue()
-    return img_byte_arr
-
-if __name__ == '__main__':
-    main()
+# 게임 시작
+render_level()
