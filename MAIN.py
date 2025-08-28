@@ -1,96 +1,114 @@
 import streamlit as st
-import time
+import requests
+import os
+import json
+
+# 네이버 클라우드 플랫폼에서 발급받은 Client ID와 Client Secret을 설정합니다.
+# 보안을 위해 secrets.toml 파일을 사용하는 것을 권장합니다.
+try:
+    NAVER_CLIENT_ID = st.secrets["NAVER_CLIENT_ID"]
+    NAVER_CLIENT_SECRET = st.secrets["NAVER_CLIENT_SECRET"]
+except KeyError:
+    st.error("네이버 API 키를 찾을 수 없습니다. secrets.toml 파일에 NAVER_CLIENT_ID와 NAVER_CLIENT_SECRET을 추가하거나, 코드에 직접 키를 입력하세요.")
+    st.stop()
 
 st.set_page_config(
-    page_title="고양이 마리오 (텍스트 버전)",
-    page_icon="🐱"
+    page_title="네이버 지도 경로 찾기",
+    page_icon="🗺️"
 )
 
-# 게임 상태를 저장할 변수 초기화
-if "game_state" not in st.session_state:
-    st.session_state.game_state = "start"
-    st.session_state.game_over = False
-    st.session_state.score = 0
+def geocode(address):
+    """주소를 위도, 경도 좌표로 변환"""
+    url = f"https://naveropenapi.apigw.ntruss.com/map-geocode/v2/geocode?query={address}"
+    headers = {
+        "X-NCP-APIGW-API-KEY-ID": NAVER_CLIENT_ID,
+        "X-NCP-APIGW-API-KEY-SECRET": NAVER_CLIENT_SECRET,
+    }
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        data = response.json()
+        if data['addresses']:
+            return (data['addresses'][0]['x'], data['addresses'][0]['y'])
+    return None
 
-def reset_game():
-    """게임을 초기화하는 함수"""
-    st.session_state.game_state = "start"
-    st.session_state.game_over = False
-    st.session_state.score = 0
+def get_route(start_coord, end_coord, mode):
+    """출발지-도착지 좌표로 최적 경로를 검색"""
+    if mode == '자동차':
+        url = "https://naveropenapi.apigw.ntruss.com/map-direction/v1/driving"
+    elif mode == '대중교통':
+        st.warning("네이버 대중교통 경로는 현재 웹 API에서 공식적으로 지원하지 않습니다. 자동차 경로를 대신 검색합니다.")
+        url = "https://naveropenapi.apigw.ntruss.com/map-direction/v1/driving"
+    else:
+        st.warning("도보 및 자전거 경로는 현재 웹 API에서 공식적으로 지원하지 않습니다. 자동차 경로를 대신 검색합니다.")
+        url = "https://naveropenapi.apigw.ntruss.com/map-direction/v1/driving"
 
-def go_to_level(level_name):
-    """다음 레벨로 이동하는 함수"""
-    st.session_state.game_state = level_name
-    st.session_state.score += 1
+    headers = {
+        "X-NCP-APIGW-API-KEY-ID": NAVER_CLIENT_ID,
+        "X-NCP-APIGW-API-KEY-SECRET": NAVER_CLIENT_SECRET,
+    }
+    params = {
+        'start': f"{start_coord[0]},{start_coord[1]}",
+        'goal': f"{end_coord[0]},{end_coord[1]}",
+    }
+    response = requests.get(url, headers=headers, params=params)
+    if response.status_code == 200:
+        return response.json()
+    return None
 
-def end_game(message):
-    """게임 오버를 처리하는 함수"""
-    st.session_state.game_over = True
-    st.error(f"❌ 게임 오버: {message}")
-    st.warning("다시 시작하려면 아래 버튼을 눌러주세요.")
-    if st.button("다시 시작하기", on_click=reset_game):
-        st.experimental_rerun()
+st.title('🗺️ 네이버 지도 최적 경로 찾기')
+st.markdown("---")
 
-def render_level():
-    """현재 게임 상태에 따라 화면을 렌더링하는 함수"""
-    if st.session_state.game_state == "start":
-        st.title('🐱 고양이 마리오 텍스트 모험')
-        st.markdown("---")
-        st.image("https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?q=80&w=2940&auto=format&fit=crop", caption="마을 입구에 도착한 고양이 마리오...", use_column_width=True)
-        st.write("마을 입구에 도착했습니다. 당신의 앞에는 마리오의 상징적인 **물음표 블록**이 두 개 보입니다. 어느 것을 칠까요?")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("왼쪽 블록 치기"):
-                go_to_level("level_1_left")
-        with col2:
-            if st.button("오른쪽 블록 치기"):
-                go_to_level("level_1_right")
+# 사용자 입력
+start_location = st.text_input("출발지를 입력하세요 (예: 서울역)", "서울역")
+end_location = st.text_input("도착지를 입력하세요 (예: 강남역)", "강남역")
 
-    elif st.session_state.game_state == "level_1_left":
-        st.header("레벨 1: 물음표 블록")
-        st.write("당신은 왼쪽 블록을 쳤습니다. **앗!** 블록에서 동전 대신 날카로운 가시가 튀어나왔습니다.")
-        end_game("가시에 찔렸습니다. 역시나 함정이었군요.")
+transport_mode = st.selectbox(
+    "이동 수단을 선택하세요:",
+    ('자동차', '대중교통', '도보', '자전거')
+)
 
-    elif st.session_state.game_state == "level_1_right":
-        st.header("레벨 1: 물음표 블록")
-        st.write("당신은 오른쪽 블록을 쳤습니다. **와!** 블록에서 버섯이 나왔습니다. 몸이 조금 더 커진 것 같네요.")
-        st.success("버섯 획득! 계속 전진하세요.")
-        st.image("https://images.unsplash.com/photo-1549557492-c0e862024de3?q=80&w=2940&auto=format&fit=crop", caption="성장 버섯을 획득했다!", use_column_width=True)
-        if st.button("계속하기"):
-            go_to_level("level_2")
-            st.experimental_rerun()
+if st.button("경로 찾기"):
+    if not start_location or not end_location:
+        st.warning("출발지 또는 도착지를 입력해주세요.")
+        st.stop()
 
-    elif st.session_state.game_state == "level_2":
-        st.header("레벨 2: 절벽과 파이프")
-        st.write("버섯을 먹고 힘차게 달리던 중, 앞에 깊은 절벽이 나타났습니다. 절벽 아래로는 초록색 파이프가 보입니다. 점프해서 건너갈까요, 아니면 파이프 안으로 들어갈까요?")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("점프해서 건너가기"):
-                end_game("절벽을 건너가려다 발을 헛디뎠습니다. 그대로 아래로 추락했습니다.")
-        with col2:
-            if st.button("파이프 안으로 들어가기"):
-                st.write("파이프 안으로 조심스럽게 들어갔습니다. 놀랍게도 파이프 아래는 안전한 통로였습니다!")
-                st.success("안전하게 다음 구역으로 이동했습니다.")
-                if st.button("다음 레벨로"):
-                    go_to_level("level_3")
-                    st.experimental_rerun()
-
-    elif st.session_state.game_state == "level_3":
-        st.header("레벨 3: 최종 보스")
-        st.write("모든 역경을 뚫고 최종 보스 성에 도착했습니다. 성 안에는 거대한 악당이 기다리고 있습니다.")
-        st.write("...라고 생각했지만, 갑자기 **'끝'** 이라는 글자가 나타나더니 게임이 종료되었습니다.")
-        st.balloons()
-        end_game("성공적으로 게임을 클리어했습니다! 하지만 이런 게임이 늘 그렇듯, 허무한 엔딩이 기다리고 있었군요.")
-
-    st.markdown("---")
-    st.write(f"현재 점수: {st.session_state.score}")
+    start_coord = geocode(start_location)
+    end_coord = geocode(end_location)
     
-    if st.session_state.game_over:
-        st.markdown("<p style='text-align: center;'><strong>게임 오버!</strong></p>", unsafe_allow_html=True)
-        if st.button("다시 시작", key="restart_after_game_over"):
-            st.experimental_rerun()
+    if not start_coord:
+        st.error(f"'{start_location}'의 좌표를 찾을 수 없습니다. 정확한 주소를 입력해주세요.")
+    elif not end_coord:
+        st.error(f"'{end_location}'의 좌표를 찾을 수 없습니다. 정확한 주소를 입력해주세요.")
+    else:
+        st.success("✅ 좌표 변환 성공! 경로를 검색합니다...")
+        route_data = get_route(start_coord, end_coord, transport_mode)
+        
+        if route_data and 'route' in route_data and 'trafast' in route_data['route']:
+            st.subheader("✅ 최적 경로 정보")
+            
+            # API 응답에서 필요한 정보 추출
+            if route_data['route']['trafast']:
+                path_info = route_data['route']['trafast'][0]
+                distance = path_info['summary']['distance'] / 1000  # 미터를 킬로미터로 변환
+                duration_sec = path_info['summary']['duration'] / 1000  # 밀리초를 초로 변환
+                
+                duration_min = int(duration_sec / 60)
+                duration_hour = int(duration_min / 60)
+                duration_min %= 60
+                
+                st.write(f"**총 거리:** {distance:.2f} km")
+                st.write(f"**예상 시간:** {duration_hour}시간 {duration_min}분")
+                
+                # 경로를 네이버 지도로 보여주기
+                # Geocoding된 좌표를 이용해 URL 생성
+                naver_map_url = f"https://map.naver.com/p/search/{start_location}?c=15.00,0,0,0,dh"
+                st.write(f"**👉 네이버 지도로 경로 보기:** [바로가기]({naver_map_url})")
+                
+                # HTML과 JavaScript를 사용하여 지도 표시 (API 키 노출 문제로 이미지로 대체)
+                # 실제 앱에서는 네이버 지도의 웹 컴포넌트나 JS API를 사용해야 합니다.
+                st.image("https://naver.github.io/maps.js.v3/img/sample/simple-map.png", caption="여기에 네이버 지도가 표시될 영역입니다.")
+                st.info("⚠️ 현재 Streamlit에서 네이버 지도를 직접 연동하는 공식적인 컴포넌트가 없어, API 호출 결과만 표시합니다. 실제 지도는 링크를 통해 확인하세요.")
 
-# 게임 시작
-render_level()
+        else:
+            st.error("경로를 찾는 데 실패했습니다. 다시 확인해주세요.")
+            st.json(route_data) # 디버깅용으로 API 응답 출력
